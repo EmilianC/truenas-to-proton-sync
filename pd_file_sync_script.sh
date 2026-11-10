@@ -54,7 +54,7 @@ RESET_STATE=0
 FIRST_RUN=0
 TIMEOUT_DURATION=""
 WATCHDOG_PID=""
-SYNC_ERROR=0 
+SYNC_ERROR=0
 
 # --- Function Definitions ---
 validate_duration() {
@@ -112,7 +112,7 @@ log_footer() {
     local new_changed_count=$1
     local deleted_count=$2
     local deleted_folder_count=$3
-    
+
     # Use ${var:-0} to guarantee it defaults to 0 if empty/null
     local excl_up=${4:-0}
     local excl_del_f=${5:-0}
@@ -153,18 +153,18 @@ run_pd_cli_with_retry() {
     local attempt=1
     local exit_code=0
     local temp_output="$DB_DIR/pd_cli_temp.log"
-    
+
     while [ "$attempt" -le "$max_attempts" ]; do
         # Execute command and capture its true exit code immediately
         "$@" > "$temp_output" 2>&1
         exit_code=$?
-        
+
         # Evaluate the captured exit code
         if [ "$exit_code" -eq 0 ]; then
             rm -f "$temp_output"
             return 0
         fi
-        
+
         write_log "Attempt $attempt failed for command: $*"
         write_log "$temp_output"
         sleep 5
@@ -194,7 +194,7 @@ cleanup_watchdog() {
         wait "$WATCHDOG_PID" 2>/dev/null || true
     fi
 }
-trap cleanup_watchdog EXIT 
+trap cleanup_watchdog EXIT
 trap 'cleanup_and_exit' ERR INT
 trap 'timeout_exit' TERM
 
@@ -352,21 +352,21 @@ EXCL_DEL_F=0
 EXCL_DEL_DIR=0
 
 if [ "$RESET_STATE" -eq 0 ]; then
-    
+
 # 1. Process File Deletions
     if [ -s "$DELETED_FILES" ]; then
         write_log "Processing file deletions..."
         while IFS= read -r rel_path; do
             [ -z "$rel_path" ] && continue
-            
-            if is_excluded "$rel_path"; then 
+
+            if is_excluded "$rel_path"; then
                 EXCL_DEL_F=$((EXCL_DEL_F + 1))
                 continue
             fi
-            
+
             target_remote_path="$REMOTE_DIR/$rel_path"
             temp_output="$DB_DIR/pd_trash_temp.log"
-            
+
             # if ! keeps this failure "checked" so trap ERR does not abort the script
             if ! "$PD_CLI" filesystem trash "$target_remote_path" > "$temp_output" 2>&1; then
                 if is_already_gone "$temp_output"; then
@@ -384,21 +384,21 @@ if [ "$RESET_STATE" -eq 0 ]; then
             rm -f "$temp_output"
         done < "$DELETED_FILES"
     fi
-    
+
     # 2. Process Folder Deletions
     if [ "$FIRST_RUN" -eq 0 ] && [ -s "$DELETED_FOLDERS" ]; then
         write_log "Processing folder deletions..."
         while IFS= read -r rel_path; do
             [ -z "$rel_path" ] && continue
-            
-            if is_excluded "$rel_path"; then 
+
+            if is_excluded "$rel_path"; then
                 EXCL_DEL_DIR=$((EXCL_DEL_DIR + 1))
                 continue
             fi
-            
+
             target_remote_path="$REMOTE_DIR/$rel_path"
             temp_output="$DB_DIR/pd_trash_temp.log"
-            
+
             if ! "$PD_CLI" filesystem trash "$target_remote_path" > "$temp_output" 2>&1; then
                 if is_already_gone "$temp_output"; then
                     write_log "Already gone (treating as success): $target_remote_path"
@@ -417,8 +417,8 @@ if [ "$RESET_STATE" -eq 0 ]; then
 
     # API Stability Buffer
     if [ -s "$DELETED_FILES" ] || [ -s "$DELETED_FOLDERS" ]; then
-        if [ -s "$CHANGED_FILES" ] || [ -s "$NEW_FOLDERS" ]; then 
-            sleep 5 
+        if [ -s "$CHANGED_FILES" ] || [ -s "$NEW_FOLDERS" ]; then
+            sleep 5
         fi
     fi
 
@@ -427,21 +427,21 @@ if [ "$RESET_STATE" -eq 0 ]; then
         write_log "Processing new folder creations..."
         while IFS= read -r rel_path; do
             [ -z "$rel_path" ] && continue
-            
+
             if is_excluded "$rel_path"; then continue; fi
-            
+
             parent_dir=$(dirname "$rel_path")
             folder_name=$(basename "$rel_path")
-            
+
             # Format target parent directory
             if [ "$parent_dir" = "." ]; then
                 target_parent="$REMOTE_DIR"
             else
                 target_parent="$REMOTE_DIR/$parent_dir"
             fi
-            
+
             temp_output="$DB_DIR/pd_create_temp.log"
-            
+
             if ! "$PD_CLI" filesystem create-folder "$target_parent" "$folder_name" > "$temp_output" 2>&1; then
                 if is_already_exists "$temp_output"; then
                     write_log "Folder already exists (treating as success): $target_parent/$folder_name"
@@ -462,22 +462,22 @@ if [ "$RESET_STATE" -eq 0 ]; then
         write_log "Processing file uploads..."
         while IFS= read -r rel_path; do
             [ -z "$rel_path" ] && continue
-            
-            if is_excluded "$rel_path"; then 
+
+            if is_excluded "$rel_path"; then
                 EXCL_UP=$((EXCL_UP + 1))
                 continue
             fi
-            
+
             local_file="$SOURCE_DIR$rel_path"
             dir_name=$(dirname "$rel_path")
-            
+
             # Format target directory string securely
             if [ "$dir_name" = "." ]; then
                 target_remote_dir="$REMOTE_DIR"
             else
                 target_remote_dir="$REMOTE_DIR/$dir_name"
             fi
-            
+
             if ! run_pd_cli_with_retry "$PD_CLI" filesystem upload "$local_file" "$target_remote_dir" --conflict-strategy replace; then
                 write_log "Failed to upload file: $local_file"
                 SYNC_ERROR=1
@@ -491,7 +491,7 @@ fi
 # --- Final State Commit & Cleanup ---
 if [ "$SYNC_ERROR" -eq 0 ]; then
     write_log "Operations successful. Committing state database."
-    
+
     sqlite3 "$DB_FILES" <<SQL
     BEGIN TRANSACTION;
     DROP TABLE IF EXISTS files_last_run;
@@ -508,12 +508,12 @@ SQL
     INSERT OR REPLACE INTO metadata (key, value) VALUES ('last_run_time', $(date +%s));
     COMMIT;
 SQL
-    
+
     NEW_CHANGED_COUNT=$([ -f "$CHANGED_FILES" ] && wc -l < "$CHANGED_FILES" || echo 0)
     DELETED_COUNT=$([ -f "$DELETED_FILES" ] && wc -l < "$DELETED_FILES" || echo 0)
     DELETED_FOLDER_COUNT=0
     [ "$FIRST_RUN" -eq 0 ] && DELETED_FOLDER_COUNT=$([ -f "$DELETED_FOLDERS" ] && wc -l < "$DELETED_FOLDERS" || echo 0)
-    
+
     log_footer "$NEW_CHANGED_COUNT" "$DELETED_COUNT" "$DELETED_FOLDER_COUNT" "$EXCL_UP" "$EXCL_DEL_F" "$EXCL_DEL_DIR"
 else
     write_log "ERRORS detected during sync. Database state NOT updated. Will retry next run."
